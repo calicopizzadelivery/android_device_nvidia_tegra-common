@@ -12,6 +12,7 @@
 # vendor id defines
 BRCM_SDIO=0x02d0
 BRCM_PCIE=0x14e4
+RTLK_PCIE=0x10ec
 
 perform_enumeration() {
 COUNT=0;
@@ -27,7 +28,7 @@ while [ $COUNT -le 2 ]; do
 	done
 	for path in /sys/bus/pci/devices/*; do
 		vendor=$(cat $path/vendor)
-		if [ "$vendor" = "$BRCM_PCIE" ]; then
+		if [ "$vendor" = "$BRCM_PCIE" -o "$vendor" = "$RTLK_PCIE" ]; then
 			device=$(cat $path/device)
 			/vendor/bin/log -t "wifiloader" -p i "WiFi PCIE VendorID: $vendor, DeviceID: $device"
 			return;
@@ -41,7 +42,7 @@ done
 
 load_modules() {
 COUNT=0;
-if [ -e /system/lib/modules/bluedroid_pm.ko ]; then
+if [ -e /vendor/lib/modules/bluedroid_pm.ko ]; then
 	/vendor/bin/log -t "wifiloader" -p i "Bluedroid_pm driver compiled as module"
 	while [ $COUNT -le 5 ]; do
 		if [ '1' -eq `lsmod | grep -c bluedroid_pm` ]; then
@@ -57,14 +58,24 @@ if [ -e /system/lib/modules/bluedroid_pm.ko ]; then
 fi
 
 if [ $device = "0x4354" ]; then
-	if [ -e /system/lib/modules/bcmdhd.ko ]; then
+	if [ -e /vendor/lib/modules/bcmdhd.ko ]; then
 		/vendor/bin/log -t "wifiloader" -p i "load bcmdhd module"
-		insmod /system/lib/modules/bcmdhd.ko
+		insmod /vendor/lib/modules/bcmdhd.ko
 	fi
 elif [ $device = "0x4355" -o $device = "0x43ef" ]; then
-	if [ -e /system/lib/modules/bcmdhd_pcie.ko ]; then
+	if [ -e /vendor/lib/modules/bcmdhd_pcie.ko ]; then
 		/vendor/bin/log -t "wifiloader" -p i "load bcmdhd_pcie module"
-		insmod /system/lib/modules/bcmdhd_pcie.ko
+		insmod /vendor/lib/modules/bcmdhd_pcie.ko
+	fi
+elif [ $device = "0xc822" ]; then
+	# RTL8822CE. cfg80211 first: the Realtek driver is built against it and
+	# nothing else pulls it in on a board with no Broadcom radio fitted.
+	if [ -e /vendor/lib/modules/cfg80211.ko ]; then
+		insmod /vendor/lib/modules/cfg80211.ko 2>/dev/null
+	fi
+	if [ -e /vendor/lib/modules/rtl8822ce.ko ]; then
+		/vendor/bin/log -t "wifiloader" -p i "load rtl8822ce module"
+		insmod /vendor/lib/modules/rtl8822ce.ko
 	fi
 fi
 }
